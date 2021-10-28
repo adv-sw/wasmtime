@@ -129,6 +129,26 @@ impl CompiledExpression {
     }
 }
 
+
+pub fn write_expr_addr(addr : u64)-> gimli::write::Expression 
+{
+   let mut w = ExpressionWriter::new();
+   w.write_op(gimli::constants::DW_OP_addr);
+
+   let bytes = addr.to_le_bytes();
+   w.write_u8(bytes[0]);
+   w.write_u8(bytes[1]);
+   w.write_u8(bytes[2]);
+   w.write_u8(bytes[3]);
+   w.write_u8(bytes[4]);
+   w.write_u8(bytes[5]);
+   w.write_u8(bytes[6]);
+   w.write_u8(bytes[7]);
+
+   gimli::write::Expression::raw(w.into_vec())
+}
+
+
 fn translate_loc(
     loc: LabelValueLoc,
     isa: &dyn TargetIsa,

@@ -1,5 +1,5 @@
 use super::address_transform::AddressTransform;
-use super::expression::{compile_expression, CompiledExpression, FunctionFrameInfo};
+use super::expression::{compile_expression, CompiledExpression, FunctionFrameInfo, write_expr_addr};
 use super::range_info_builder::RangeInfoBuilder;
 use super::refs::{PendingDebugInfoRefs, PendingUnitRefs};
 use super::{DebugInputContext, Reader, TransformError};
@@ -9,6 +9,7 @@ use gimli::{
     write, AttributeValue, DebugLineOffset, DebugLineStr, DebugStr, DebugStrOffsets,
     DebuggingInformationEntry, Unit,
 };
+
 
 #[derive(Debug)]
 pub(crate) enum FileAttributeContext<'a> {
@@ -202,7 +203,9 @@ where
                 let list_id = out_unit.locations.add(write::LocationList(result.unwrap()));
                 write::AttributeValue::LocationListRef(list_id)
             }
+
             AttributeValue::Exprloc(ref expr) => {
+
                 let frame_base =
                     if let FileAttributeContext::Children { frame_base, .. } = file_context {
                         frame_base
@@ -266,9 +269,37 @@ where
                         }
                     }
                 } else {
-                    // FIXME _expr contains invalid expression
-                    continue; // ignore attribute
-                }
+
+                   // compile_expression doesn't support global variable DW_AT_location expressions.
+                   // Hence we detect & process here instead.
+
+                   // Export static/global variables. WIP - first pass solution.
+                   // Limitations: Value is delivered to debug interface as regular pointer to be reinterpreted by debugger wasmtime filter.
+                   // That works - as far as has been tested but isn't ideal, as we're passing around potentially invalid data.
+                   // A complete solution would either implement WASMPtr style wrappers (not a pointer, a virtual address)
+                   // or implement virtual addresses in DWARF & pass directly via that mechanism. 
+                   // DWARF Proposal: DW_OP_vaddr on DW_AT_location.
+
+                   if attr.name() == gimli::DW_AT_location  
+                   {
+                      let buf = expr.0.to_slice()?;
+
+                      // Ignore unless supported op.
+                      if buf[0] != (gimli::DW_OP_addr.0 as u8) { continue; } 
+
+                      // TODO: Detect 64 bit wasm & form source address accordingly.
+                      let addr_wasm = u32::from_le_bytes([buf[1],buf[2],buf[3],buf[4]]) as u64;
+               
+                      // Translate wasm address to target.
+                      let write_expr = write_expr_addr(addr_wasm);
+                      write::AttributeValue::Exprloc(write_expr)
+                   }
+                   else
+                   {
+                       println!("Unsupported expression ignored."); // We probably want to know, so log somehow.
+                       continue; // Ignore expression
+                   }
+               }
             }
             AttributeValue::Encoding(e) => write::AttributeValue::Encoding(e),
             AttributeValue::DecimalSign(e) => write::AttributeValue::DecimalSign(e),
