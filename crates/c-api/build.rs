@@ -21,6 +21,7 @@ const FEATURES: &[&str] = &[
     "CRANELIFT",
     "WINCH",
     "DEBUG_BUILTINS",
+    "GDBSTUB",
     "WAT",
     "POOLING_ALLOCATOR",
     "COMPONENT_MODEL",

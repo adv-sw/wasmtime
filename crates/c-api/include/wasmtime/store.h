@@ -258,6 +258,46 @@ WASM_API_EXTERN void wasmtime_store_epoch_deadline_callback(
                               wasmtime_update_deadline_kind_t *update_kind),
     void *data, void (*finalizer)(void *));
 
+
+
+
+#ifdef WASMTIME_FEATURE_GDBSTUB
+
+/**
+ * \brief Start a gdbstub TCP server for Wasm guest debugging on this store.
+ *
+ * Opens a TCP listener on \p host:\p port and blocks the calling thread
+ * until a GDB/LLDB client connects.  Once connected the store's debug
+ * handler is installed and execution is held at the first Wasm instruction
+ * until the debugger issues a "continue" command.
+ *
+ * Prerequisite: the engine's #wasm_config_t must have been created with
+ * #wasmtime_config_guest_debug_set(config, true) AND
+ * #wasmtime_config_debug_info_set(config, true) before the engine was built.
+ *
+ * \param store  the store on which to attach the debugger
+ * \param host   the interface to listen on, e.g. \c "127.0.0.1"
+ * \param port   the TCP port to listen on, e.g. \c 1234
+ * \return NULL on success, or a #wasmtime_error_t describing the failure.
+ *         The caller is responsible for deleting the returned error with
+ *         #wasmtime_error_delete.
+ *
+ * \note After this call returns the gdbstub server thread continues to
+ *       service the debug session in the background.  The store must not
+ *       be deleted while the session is active.
+ *
+ * \note Only one gdbstub session per store is supported at a time.
+ *
+ * Corresponds to the `wasmtime run -g <port>` CLI behaviour.
+ */
+WASM_API_EXTERN wasmtime_error_t *wasmtime_store_start_gdbstub(
+    wasmtime_store_t *store,
+    const char *host,
+    uint16_t port);
+
+#endif /* WASMTIME_FEATURE_GDBSTUB */
+
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

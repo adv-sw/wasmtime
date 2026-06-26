@@ -398,6 +398,10 @@
     allow(unreachable_code, reason = "see comment")
 )]
 
+
+#[cfg(feature = "gdbstub")]
+pub mod gdbstub;
+
 #[cfg(feature = "std")]
 #[macro_use]
 extern crate std;

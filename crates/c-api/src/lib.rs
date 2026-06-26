@@ -106,6 +106,11 @@ mod component;
 #[cfg(feature = "component-model")]
 pub use crate::component::*;
 
+
+#[cfg(feature = "gdbstub")]
+mod store_gdbstub;
+
+
 /// Helper for running a C-defined finalizer over some data when the Rust
 /// structure is dropped.
 pub struct ForeignData {

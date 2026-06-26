@@ -66,6 +66,30 @@ pub extern "C" fn wasmtime_config_debug_info_set(c: &mut wasm_config_t, enable: 
     c.config.debug_info(enable);
 }
 
+
+
+/// Enables Wasm-VM-level guest debug instrumentation.
+///
+/// Must be called before the engine is created.  Required by
+/// `wasmtime_store_start_gdbstub`.
+///
+/// # Safety
+/// `config` must be a non-null pointer returned by `wasm_config_new()` that
+/// has not yet been consumed by `wasm_engine_new_with_config()`.
+#[unsafe(no_mangle)]
+#[cfg(feature = "gdbstub")] // gdbstub implies `debug` in Cargo.toml
+pub unsafe extern "C" fn wasmtime_config_guest_debug_set(
+    config: *mut crate::wasm_config_t,
+    enable: bool,
+) {
+    // Safety: `config` is a valid, non-null pointer; follows the same
+    // pattern as every other wasmtime_config_*_set function in this file.
+   let config = unsafe { &mut (*config).config };
+   config.guest_debug(enable);
+}
+
+
+
 #[unsafe(no_mangle)]
 pub extern "C" fn wasmtime_config_consume_fuel_set(c: &mut wasm_config_t, enable: bool) {
     c.config.consume_fuel(enable);
