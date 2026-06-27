@@ -21,6 +21,10 @@ enum VmType {
     VMMemoryDefinition,
     VMTableDefinition,
     VMComponentContext,
+    VMDrcHeapData,
+    VMCopyingHeapData,
+    VMNullHeapData,
+    VMDeferredThread,
 }
 
 /// A key that uniquely identifies an alias region across an entire compilation.
@@ -29,7 +33,7 @@ enum VmType {
 /// that alias regions can be deduplicated during inlining.
 ///
 /// The key encodes into a single `u32` with the following layout:
-/// `[ kind: 4 bits | data: 28 bits ]`
+/// `[ kind: 5 bits | data: 27 bits ]`
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum AliasRegionKey {
     /// An access of a field within a VM data structure of type `ty`.
@@ -111,6 +115,10 @@ impl AliasRegionKey {
     const VM_MEMORY_DEFINITION_KIND: u32 = Self::new_kind(0b1001);
     const VM_TABLE_DEFINITION_KIND: u32 = Self::new_kind(0b1010);
     const VM_COMPONENT_CONTEXT_KIND: u32 = Self::new_kind(0b1011);
+    const VM_DRC_HEAP_DATA_KIND: u32 = Self::new_kind(0b1100);
+    const VM_COPYING_HEAP_DATA_KIND: u32 = Self::new_kind(0b1101);
+    const VM_NULL_HEAP_DATA_KIND: u32 = Self::new_kind(0b1110);
+    const VM_DEFERRED_THREAD_KIND: u32 = Self::new_kind(0b1111);
 
     /// Encode this key into a raw `u32` suitable for use as an
     /// `AliasRegionData::user_id`.
@@ -124,6 +132,10 @@ impl AliasRegionKey {
                     VmType::VMMemoryDefinition => Self::VM_MEMORY_DEFINITION_KIND,
                     VmType::VMTableDefinition => Self::VM_TABLE_DEFINITION_KIND,
                     VmType::VMComponentContext => Self::VM_COMPONENT_CONTEXT_KIND,
+                    VmType::VMDrcHeapData => Self::VM_DRC_HEAP_DATA_KIND,
+                    VmType::VMCopyingHeapData => Self::VM_COPYING_HEAP_DATA_KIND,
+                    VmType::VMNullHeapData => Self::VM_NULL_HEAP_DATA_KIND,
+                    VmType::VMDeferredThread => Self::VM_DEFERRED_THREAD_KIND,
                 };
                 kind | (offset & Self::OFFSET_MASK)
             }
@@ -1099,6 +1111,44 @@ where
         )
     }
 
+    /// Load the `VMStoreContext::current_thread` field (the JIT-visible
+    /// deferred-thread pointer; see `VMLazyThread`).
+    pub fn vmstore_context_current_thread(
+        &mut self,
+        cursor: &mut FuncCursor<'_>,
+        vmstore_ctx: ir::Value,
+    ) -> ir::Value {
+        self.vmstore_context_load(
+            cursor,
+            self.pointer_type,
+            ir::MemFlagsData::trusted(),
+            vmstore_ctx,
+            self.offsets
+                .get_ptr_size()
+                .vmstore_context_current_thread()
+                .into(),
+        )
+    }
+
+    /// Store the `VMStoreContext::current_thread` field.
+    pub fn store_vmstore_context_current_thread(
+        &mut self,
+        cursor: &mut FuncCursor<'_>,
+        vmstore_ctx: ir::Value,
+        new_thread: ir::Value,
+    ) {
+        self.vmstore_context_store(
+            cursor,
+            ir::MemFlagsData::trusted(),
+            vmstore_ctx,
+            self.offsets
+                .get_ptr_size()
+                .vmstore_context_current_thread()
+                .into(),
+            new_thread,
+        )
+    }
+
     /// Get a `Load` of the GC heap base pointer (`VMStoreContext::gc_heap.base`).
     ///
     /// The caller supplies the base flags because whether the base pointer is
@@ -1327,6 +1377,194 @@ where
             self.offsets
                 .get_ptr_size()
                 .vmstore_context_component_context_slot(slot)
+                .into(),
+            val,
+        )
+    }
+}
+
+/// `VMDeferredThread`-related methods.
+impl<Offsets> AliasRegions<Offsets>
+where
+    Offsets: GetPtrSize,
+{
+    fn vmdeferred_thread_region(
+        &mut self,
+        func: &mut ir::Function,
+        offset: u32,
+    ) -> ir::AliasRegion {
+        self.region(
+            func,
+            AliasRegionKey::Vm {
+                ty: VmType::VMDeferredThread,
+                offset,
+            },
+        )
+    }
+
+    fn vmdeferred_thread_load(
+        &mut self,
+        cursor: &mut FuncCursor<'_>,
+        ty: ir::Type,
+        base_flags: ir::MemFlagsData,
+        vmdeferred_thread_ptr: ir::Value,
+        offset: u32,
+    ) -> ir::Value {
+        let region = self.vmdeferred_thread_region(cursor.func, offset);
+        cursor.ins().load(
+            ty,
+            base_flags.with_alias_region(Some(region)),
+            vmdeferred_thread_ptr,
+            i32::try_from(offset).unwrap(),
+        )
+    }
+
+    fn vmdeferred_thread_store(
+        &mut self,
+        cursor: &mut FuncCursor<'_>,
+        base_flags: ir::MemFlagsData,
+        vmdeferred_thread_ptr: ir::Value,
+        offset: u32,
+        val: ir::Value,
+    ) {
+        let region = self.vmdeferred_thread_region(cursor.func, offset);
+        cursor.ins().store(
+            base_flags.with_alias_region(Some(region)),
+            val,
+            vmdeferred_thread_ptr,
+            i32::try_from(offset).unwrap(),
+        );
+    }
+
+    /// Load `VMDeferredThread::parent` (the current thread this frame replaced).
+    pub fn vmdeferred_thread_parent(
+        &mut self,
+        cursor: &mut FuncCursor<'_>,
+        vmdeferred_thread_ptr: ir::Value,
+    ) -> ir::Value {
+        self.vmdeferred_thread_load(
+            cursor,
+            self.pointer_type,
+            ir::MemFlagsData::trusted(),
+            vmdeferred_thread_ptr,
+            self.offsets
+                .get_ptr_size()
+                .vmdeferred_thread_parent()
+                .into(),
+        )
+    }
+
+    /// Store `VMDeferredThread::parent`.
+    pub fn store_vmdeferred_thread_parent(
+        &mut self,
+        cursor: &mut FuncCursor<'_>,
+        vmdeferred_thread_ptr: ir::Value,
+        parent: ir::Value,
+    ) {
+        self.vmdeferred_thread_store(
+            cursor,
+            ir::MemFlagsData::trusted(),
+            vmdeferred_thread_ptr,
+            self.offsets
+                .get_ptr_size()
+                .vmdeferred_thread_parent()
+                .into(),
+            parent,
+        )
+    }
+
+    /// Store `VMDeferredThread::caller_instance`.
+    pub fn store_vmdeferred_thread_caller_instance(
+        &mut self,
+        cursor: &mut FuncCursor<'_>,
+        vmdeferred_thread_ptr: ir::Value,
+        caller_instance: ir::Value,
+    ) {
+        self.vmdeferred_thread_store(
+            cursor,
+            ir::MemFlagsData::trusted(),
+            vmdeferred_thread_ptr,
+            self.offsets
+                .get_ptr_size()
+                .vmdeferred_thread_caller_instance()
+                .into(),
+            caller_instance,
+        )
+    }
+
+    /// Store `VMDeferredThread::callee_async`.
+    pub fn store_vmdeferred_thread_callee_async(
+        &mut self,
+        cursor: &mut FuncCursor<'_>,
+        vmdeferred_thread_ptr: ir::Value,
+        callee_async: ir::Value,
+    ) {
+        self.vmdeferred_thread_store(
+            cursor,
+            ir::MemFlagsData::trusted(),
+            vmdeferred_thread_ptr,
+            self.offsets
+                .get_ptr_size()
+                .vmdeferred_thread_callee_async()
+                .into(),
+            callee_async,
+        )
+    }
+
+    /// Store `VMDeferredThread::callee_instance`.
+    pub fn store_vmdeferred_thread_callee_instance(
+        &mut self,
+        cursor: &mut FuncCursor<'_>,
+        vmdeferred_thread_ptr: ir::Value,
+        callee_instance: ir::Value,
+    ) {
+        self.vmdeferred_thread_store(
+            cursor,
+            ir::MemFlagsData::trusted(),
+            vmdeferred_thread_ptr,
+            self.offsets
+                .get_ptr_size()
+                .vmdeferred_thread_callee_instance()
+                .into(),
+            callee_instance,
+        )
+    }
+
+    /// Load `VMDeferredThread::saved_context[i]` (a saved `context.{get,set}`
+    /// slot).
+    pub fn vmdeferred_thread_saved_context(
+        &mut self,
+        cursor: &mut FuncCursor<'_>,
+        vmdeferred_thread_ptr: ir::Value,
+        i: u8,
+    ) -> ir::Value {
+        self.vmdeferred_thread_load(
+            cursor,
+            ir::types::I32,
+            ir::MemFlagsData::trusted(),
+            vmdeferred_thread_ptr,
+            self.offsets
+                .get_ptr_size()
+                .vmdeferred_thread_saved_context(i)
+                .into(),
+        )
+    }
+
+    /// Store `VMDeferredThread::saved_context[i]`.
+    pub fn store_vmdeferred_thread_saved_context(
+        &mut self,
+        cursor: &mut FuncCursor<'_>,
+        vmdeferred_thread_ptr: ir::Value,
+        i: u8,
+        val: ir::Value,
+    ) {
+        self.vmdeferred_thread_store(
+            cursor,
+            ir::MemFlagsData::trusted(),
+            vmdeferred_thread_ptr,
+            self.offsets
+                .get_ptr_size()
+                .vmdeferred_thread_saved_context(i)
                 .into(),
             val,
         )
@@ -1645,5 +1883,235 @@ impl AliasRegions<VMComponentOffsets<u8>> {
             vmctx,
             self.offsets.may_leave(instance),
         )
+    }
+}
+
+/// Methods for the collectors' private heap-data structs.
+///
+/// Each struct is a separate allocation reached through a `*mut _` stored in the
+/// `VMContext`. Their fields are *not* GC heap locations, so they are tagged with
+/// the owning struct's own region (keyed on the field offset within the struct)
+/// rather than the `GcHeap` region. These helpers emit the field load/store.
+impl<Offsets> AliasRegions<Offsets>
+where
+    Offsets: GetPtrSize,
+{
+    fn vmdrc_heap_data_region(&mut self, func: &mut ir::Function, offset: u32) -> ir::AliasRegion {
+        self.region(
+            func,
+            AliasRegionKey::Vm {
+                ty: VmType::VMDrcHeapData,
+                offset,
+            },
+        )
+    }
+
+    /// Emit a load of the DRC over-approximated-stack-roots list head, given the
+    /// a `*mut VMDrcHeapData`.
+    pub fn vmdrc_heap_data_over_approximated_stack_roots(
+        &mut self,
+        cursor: &mut FuncCursor<'_>,
+        drc_heap_data: ir::Value,
+    ) -> ir::Value {
+        let offset = self
+            .offsets
+            .get_ptr_size()
+            .vmdrc_heap_data_over_approximated_stack_roots();
+        let region = self.vmdrc_heap_data_region(cursor.func, offset.into());
+        cursor.ins().load(
+            ir::types::I32,
+            ir::MemFlagsData::trusted().with_alias_region(Some(region)),
+            drc_heap_data,
+            i32::from(offset),
+        )
+    }
+
+    /// Emit a store to the DRC over-approximated-stack-roots list head.
+    pub fn store_vmdrc_heap_data_over_approximated_stack_roots(
+        &mut self,
+        cursor: &mut FuncCursor<'_>,
+        drc_heap_data: ir::Value,
+        val: ir::Value,
+    ) {
+        let offset = self
+            .offsets
+            .get_ptr_size()
+            .vmdrc_heap_data_over_approximated_stack_roots();
+        let region = self.vmdrc_heap_data_region(cursor.func, offset.into());
+        cursor.ins().store(
+            ir::MemFlagsData::trusted().with_alias_region(Some(region)),
+            val,
+            drc_heap_data,
+            i32::from(offset),
+        );
+    }
+
+    /// Emit a load of the current over-approximated-stack-roots list length.
+    pub fn vmdrc_heap_data_current_over_approximated_stack_roots_len(
+        &mut self,
+        cursor: &mut FuncCursor<'_>,
+        drc_heap_data: ir::Value,
+    ) -> ir::Value {
+        let offset = self
+            .offsets
+            .get_ptr_size()
+            .vmdrc_heap_data_current_over_approximated_stack_roots_len();
+        let region = self.vmdrc_heap_data_region(cursor.func, offset.into());
+        cursor.ins().load(
+            ir::types::I32,
+            ir::MemFlagsData::trusted().with_alias_region(Some(region)),
+            drc_heap_data,
+            i32::from(offset),
+        )
+    }
+
+    /// Emit a store to the current over-approximated-stack-roots list length.
+    pub fn store_vmdrc_heap_data_current_over_approximated_stack_roots_len(
+        &mut self,
+        cursor: &mut FuncCursor<'_>,
+        drc_heap_data: ir::Value,
+        len: ir::Value,
+    ) {
+        let offset = self
+            .offsets
+            .get_ptr_size()
+            .vmdrc_heap_data_current_over_approximated_stack_roots_len();
+        let region = self.vmdrc_heap_data_region(cursor.func, offset.into());
+        cursor.ins().store(
+            ir::MemFlagsData::trusted().with_alias_region(Some(region)),
+            len,
+            drc_heap_data,
+            i32::from(offset),
+        );
+    }
+
+    /// Emit a load of the over-approximated-stack-roots list length after the
+    /// last GC.
+    pub fn vmdrc_heap_data_over_approximated_stack_roots_len_after_last_gc(
+        &mut self,
+        cursor: &mut FuncCursor<'_>,
+        drc_heap_data: ir::Value,
+    ) -> ir::Value {
+        let offset = self
+            .offsets
+            .get_ptr_size()
+            .vmdrc_heap_data_over_approximated_stack_roots_len_after_last_gc();
+        let region = self.vmdrc_heap_data_region(cursor.func, offset.into());
+        cursor.ins().load(
+            ir::types::I32,
+            ir::MemFlagsData::trusted().with_alias_region(Some(region)),
+            drc_heap_data,
+            i32::from(offset),
+        )
+    }
+
+    fn vmcopying_heap_data_region(
+        &mut self,
+        func: &mut ir::Function,
+        offset: u32,
+    ) -> ir::AliasRegion {
+        self.region(
+            func,
+            AliasRegionKey::Vm {
+                ty: VmType::VMCopyingHeapData,
+                offset,
+            },
+        )
+    }
+
+    /// Emit a load of the copying collector's bump pointer.
+    pub fn vmcopying_heap_data_bump_ptr(
+        &mut self,
+        cursor: &mut FuncCursor<'_>,
+        copying_heap_data: ir::Value,
+    ) -> ir::Value {
+        let offset = self.offsets.get_ptr_size().vmcopying_heap_data_bump_ptr();
+        let region = self.vmcopying_heap_data_region(cursor.func, offset.into());
+        cursor.ins().load(
+            ir::types::I32,
+            ir::MemFlagsData::trusted().with_alias_region(Some(region)),
+            copying_heap_data,
+            i32::from(offset),
+        )
+    }
+
+    /// Emit a store to the copying collector's bump pointer.
+    pub fn store_vmcopying_heap_data_bump_ptr(
+        &mut self,
+        cursor: &mut FuncCursor<'_>,
+        copying_heap_data: ir::Value,
+        val: ir::Value,
+    ) {
+        let offset = self.offsets.get_ptr_size().vmcopying_heap_data_bump_ptr();
+        let region = self.vmcopying_heap_data_region(cursor.func, offset.into());
+        cursor.ins().store(
+            ir::MemFlagsData::trusted().with_alias_region(Some(region)),
+            val,
+            copying_heap_data,
+            i32::from(offset),
+        );
+    }
+
+    /// Emit a load of the copying collector's active-space-end pointer.
+    pub fn vmcopying_heap_data_active_space_end(
+        &mut self,
+        cursor: &mut FuncCursor<'_>,
+        copying_heap_data: ir::Value,
+    ) -> ir::Value {
+        let offset = self
+            .offsets
+            .get_ptr_size()
+            .vmcopying_heap_data_active_space_end();
+        let region = self.vmcopying_heap_data_region(cursor.func, offset.into());
+        cursor.ins().load(
+            ir::types::I32,
+            ir::MemFlagsData::trusted().with_alias_region(Some(region)),
+            copying_heap_data,
+            i32::from(offset),
+        )
+    }
+
+    /// Emit a load of the null collector's bump finger (the first and only field
+    /// of its heap data, at offset 0).
+    pub fn vmnull_heap_data_bump_finger(
+        &mut self,
+        cursor: &mut FuncCursor<'_>,
+        null_collector_heap_data: ir::Value,
+    ) -> ir::Value {
+        let region = self.region(
+            cursor.func,
+            AliasRegionKey::Vm {
+                ty: VmType::VMNullHeapData,
+                offset: 0,
+            },
+        );
+        cursor.ins().load(
+            ir::types::I32,
+            ir::MemFlagsData::trusted().with_alias_region(Some(region)),
+            null_collector_heap_data,
+            0,
+        )
+    }
+
+    /// Emit a store to the null collector's bump finger.
+    pub fn store_vmnull_heap_data_bump_finger(
+        &mut self,
+        cursor: &mut FuncCursor<'_>,
+        null_collector_heap_data: ir::Value,
+        val: ir::Value,
+    ) {
+        let region = self.region(
+            cursor.func,
+            AliasRegionKey::Vm {
+                ty: VmType::VMNullHeapData,
+                offset: 0,
+            },
+        );
+        cursor.ins().store(
+            ir::MemFlagsData::trusted().with_alias_region(Some(region)),
+            val,
+            null_collector_heap_data,
+            0,
+        );
     }
 }
