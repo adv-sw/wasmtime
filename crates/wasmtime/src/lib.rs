@@ -399,8 +399,8 @@
 )]
 
 
-#[cfg(feature = "gdbstub")]
-pub mod gdbstub;
+#[cfg(feature = "dbg2")]
+pub mod dbg2;
 
 #[cfg(feature = "std")]
 #[macro_use]

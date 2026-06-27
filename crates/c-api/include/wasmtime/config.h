@@ -142,7 +142,7 @@ enum wasmtime_regalloc_algorithm_enum { // RegallocAlgorithm
 WASMTIME_CONFIG_PROP(void, debug_info, bool)
 
 
-#ifdef WASMTIME_FEATURE_GDBSTUB
+#ifdef WASMTIME_FEATURE_DBG2
 
 /**
  * \brief Enable or disable Wasm-VM-level guest debugging instrumentation.
@@ -150,7 +150,7 @@ WASMTIME_CONFIG_PROP(void, debug_info, bool)
  * When enabled, compiled guest code is instrumented so that the Wasm VM
  * state (locals, operand stack, program counter) can be inspected
  * precisely at every step.  This is required before calling
- * #wasmtime_store_start_gdbstub.
+ * #wasmtime_store_start_dbg2.
  *
  * \param config the configuration object to alter
  * \param enable \c true to enable guest-debug instrumentation
@@ -163,7 +163,7 @@ WASMTIME_CONFIG_PROP(void, debug_info, bool)
  */
 WASMTIME_CONFIG_PROP(void, guest_debug, bool)
 
-#endif /* WASMTIME_FEATURE_GDBSTUB */
+#endif /* WASMTIME_FEATURE_DBG2 */
 
 
 /**

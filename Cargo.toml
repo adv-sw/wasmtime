@@ -772,3 +772,24 @@ fpr = "fpr"
 
 [workspace.metadata.typos.files]
 extend-exclude = [ "docs/js/mermaid*.js", "crates/wasi-nn/**/*.txt", "*.isle" ]
+
+
+
+
+# ------------------------------------------------------------------------------------------------------------
+
+# Not part of patch - strip unnecessary debug for current development work so link can succeed.
+
+[profile.dev]
+debug = 2 # Keep full debug info for your workspace crates by default
+
+# Lower debug info for heavy dependencies so link.exe doesn't choke
+[profile.dev.package."*"]
+debug = 1 # 1 provides line tables (file/line info for stack traces) but drops variable data
+
+[profile.dev.package.cranelift-codegen]
+debug = 0
+[profile.dev.package.hyper]
+debug = 0
+
+# ------------------------------------------------------------------------------------------------------------

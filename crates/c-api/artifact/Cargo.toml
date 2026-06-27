@@ -40,7 +40,7 @@ default = [
   'cranelift',
   'winch',
   'debug-builtins',
-  'gdbstub',  
+  'dbg2',  
   'pooling-allocator',
   'component-model',
   'component-model-async',
@@ -69,7 +69,7 @@ gc-copying = ["wasmtime-c-api/gc-copying"]
 cranelift = ["wasmtime-c-api/cranelift"]
 winch = ["wasmtime-c-api/winch"]
 debug-builtins = ["wasmtime-c-api/debug-builtins"]
-gdbstub = ["wasmtime-c-api/gdbstub"]
+dbg2 = ["wasmtime-c-api/dbg2"]
 pooling-allocator = ["wasmtime-c-api/pooling-allocator"]
 component-model = ["wasmtime-c-api/component-model"]
 component-model-async = ["wasmtime-c-api/component-model-async"]

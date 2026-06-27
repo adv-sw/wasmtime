@@ -107,8 +107,8 @@ mod component;
 pub use crate::component::*;
 
 
-#[cfg(feature = "gdbstub")]
-mod store_gdbstub;
+#[cfg(feature = "dbg2")]
+mod store_dbg2;
 
 
 /// Helper for running a C-defined finalizer over some data when the Rust

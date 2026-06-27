@@ -261,7 +261,7 @@ WASM_API_EXTERN void wasmtime_store_epoch_deadline_callback(
 
 
 
-#ifdef WASMTIME_FEATURE_GDBSTUB
+#ifdef WASMTIME_FEATURE_DBG2
 
 /**
  * \brief Start a gdbstub TCP server for Wasm guest debugging on this store.
@@ -290,12 +290,12 @@ WASM_API_EXTERN void wasmtime_store_epoch_deadline_callback(
  *
  * Corresponds to the `wasmtime run -g <port>` CLI behaviour.
  */
-WASM_API_EXTERN wasmtime_error_t *wasmtime_store_start_gdbstub(
+WASM_API_EXTERN wasmtime_error_t *wasmtime_store_start_dbg2(
     wasmtime_store_t *store,
     const char *host,
     uint16_t port);
 
-#endif /* WASMTIME_FEATURE_GDBSTUB */
+#endif /* WASMTIME_FEATURE_DBG2 */
 
 
 #ifdef __cplusplus

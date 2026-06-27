@@ -1,4 +1,4 @@
-//! Custom GDB stub implementation for guest debugging.
+//! DBG2 stub implementation for guest debugging.
 
 use crate::{Result, StoreContextMut};
 use std::net::TcpStream;
@@ -8,7 +8,7 @@ pub fn start_debug_session<T>(
     _ctx: &mut StoreContextMut<'_, T>,
     _stream: TcpStream,
 ) -> Result<()> {
-    // Your new gdbstub backend orchestration logic goes here!
+    // DBG2 initialize
     
-    todo!("Implement new gdbstub orchestration");
+    todo!("Implement dbg2 internal initialize");
 }

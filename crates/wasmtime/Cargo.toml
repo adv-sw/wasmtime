@@ -129,7 +129,7 @@ harness = false
 # done to cut down on binary size by disabling features that are not required
 # for a particular embedding.
 [features]
-gdbstub = ["debug"]
+dbg2 = ["debug"]
 default = [
   'anyhow',
   'async',

@@ -1,4 +1,4 @@
-//! C API implementation of `wasmtime_store_start_gdbstub`.
+//! C API implementation of `wasmtime_store_start_dbg2`.
 //!
 
 use wasmtime::{Error, Store};
@@ -10,7 +10,7 @@ use wasmtime::AsContextMut;
 
 
 /// Opaque host-data type used when the caller provides none.
-/// The store_gdbstub function only needs a context pointer; the actual
+/// The store_dbg2 function only needs a context pointer; the actual
 /// host data lives inside the caller's `wasmtime_store_t`.
 struct NoData;
 
@@ -19,8 +19,8 @@ struct NoData;
 /// Called from C.  `store` must be a valid, non-null `wasmtime_store_t *`.
 /// `host` must be a valid, null-terminated C string.
 #[unsafe(no_mangle)]
-#[cfg(feature = "gdbstub")]
-pub unsafe extern "C" fn wasmtime_store_start_gdbstub(
+#[cfg(feature = "dbg2")]
+pub unsafe extern "C" fn wasmtime_store_start_dbg2(
     store: *mut crate::WasmtimeStore,
     host: *const c_char,
     port: u16,
@@ -52,7 +52,7 @@ pub unsafe extern "C" fn wasmtime_store_start_gdbstub(
         Ok(l) => l,
         Err(e) => {
          return Some(Box::new(Error::msg(format!(
-             "gdbstub: bind failed on {}: {}",
+             "dbg2: bind failed on {}: {}",
              addr,
              e
          ))));
@@ -73,7 +73,7 @@ pub unsafe extern "C" fn wasmtime_store_start_gdbstub(
         Ok(pair) => pair,
         Err(e) => {
             return Some(Box::new(Error::msg(format!(
-                "gdbstub: accept failed: {}",
+                "dbg2: accept failed: {}",
                 e
             ))));
         }
@@ -92,12 +92,12 @@ pub unsafe extern "C" fn wasmtime_store_start_gdbstub(
     // `wasmtime::StoreContextMut<'_, crate::StoreData>`.
     let mut ctx = store_ref.as_context_mut();
 
-    // Build and start the gdbstub session in a background thread.
-    // `wasmtime::gdbstub::start_debug_session` is available when the
-    // `gdbstub` Cargo feature is enabled on the main `wasmtime` crate.
+    // Build and start the dbg2 session in a background thread.
+    // `wasmtime::dbg2::start_debug_session` is available when the
+    // `dbg2` Cargo feature is enabled on the main `wasmtime` crate.
     // It takes ownership of the TcpStream and installs a DebugHandler on
     // the store via `Store::set_debug_handler`.
-    match wasmtime::gdbstub::start_debug_session(&mut ctx, tcp_stream) {
+    match wasmtime::dbg2::start_debug_session(&mut ctx, tcp_stream) {
         Ok(()) => None,
         Err(e) => Some(Box::new(Error::from(e))),
     }
